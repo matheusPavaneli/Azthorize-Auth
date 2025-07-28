@@ -16,9 +16,9 @@ async function bootstrap() {
       contentSecurityPolicy: {
         useDefaults: true,
         directives: {
-          'default-src': ["'self'"],
-          'script-src': ["'self'"],
-          'style-src': ["'self'"],
+          'default-src': ['self'],
+          'script-src': ['self'],
+          'style-src': ['self'],
         },
       },
       crossOriginEmbedderPolicy: false,
