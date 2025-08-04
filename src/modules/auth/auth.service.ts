@@ -1,4 +1,5 @@
 import {
+  forwardRef,
   HttpException,
   HttpStatus,
   Inject,
@@ -11,13 +12,14 @@ import { UserService } from '../user/user.service';
 import type IPayload from 'src/common/interfaces/IPayload';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
-import type { IProvider, User } from '../user/user.entity';
+import { IProvider, User } from '../user/user.entity';
 
 @Injectable()
 export class AuthService {
   private readonly logger: Logger = new Logger(AuthService.name);
   private readonly MAX_ATTEMPS: number = 3;
   constructor(
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     @Inject('JWT_ACCESS_TOKEN_SERVICE')
     private readonly jwtAccessService: JwtService,
@@ -37,7 +39,10 @@ export class AuthService {
     refreshToken: string;
     user: User;
   }> => {
-    const user = await this.userService.findByEmail(email);
+    const user = await this.userService.getUserByProviderAndEmail(
+      IProvider.DEFAULT,
+      email,
+    );
     const isPasswordValid = await user?.comparePassword(password);
 
     if (!user || !isPasswordValid) {
@@ -50,7 +55,7 @@ export class AuthService {
       email,
       username: user.username,
       twoFactorEnabled: user.twoFactorEnabled,
-      twoFactorValidated: !user.twoFactorEnabled,
+      twoFactorValidated: false,
     };
 
     const accessToken = this.createAccessToken(payload);
@@ -127,6 +132,14 @@ export class AuthService {
   };
 
   public sendRecoverPasswordByEmail = async (email: string): Promise<void> => {
+    const emailExistsOnDatabase =
+      await this.userService.emailExistsOnDatabase(email);
+
+    if (!emailExistsOnDatabase) {
+      this.logger.error(`Email ${email} not found on database`);
+      return;
+    }
+
     const token = this.createTokenByEmail(email);
     const url = this.generateRecoverPasswordUrl(token);
     await this.emailService.addEmailToQueue({
@@ -154,7 +167,6 @@ export class AuthService {
     try {
       const { email }: { email: string } =
         await this.jwtVerifyService.verify(token);
-      console.log(email);
       return email;
     } catch {
       this.logger.error('Invalid recover password token');
@@ -199,7 +211,12 @@ export class AuthService {
     );
 
     if (!user) {
-      user = await this.userService.create({ email, name, provider });
+      user = await this.userService.create({
+        email,
+        name,
+        provider,
+        isVerified: true,
+      });
       this.logger.log(`User created with provider ${provider}`);
     }
 

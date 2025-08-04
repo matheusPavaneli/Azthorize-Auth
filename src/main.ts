@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
@@ -16,9 +15,9 @@ async function bootstrap() {
       contentSecurityPolicy: {
         useDefaults: true,
         directives: {
-          'default-src': ['self'],
-          'script-src': ['self'],
-          'style-src': ['self'],
+          'default-src': ["'self'"],
+          'script-src': ["'self'"],
+          'style-src': ["'self'"],
         },
       },
       crossOriginEmbedderPolicy: false,

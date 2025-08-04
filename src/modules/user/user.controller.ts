@@ -4,9 +4,12 @@ import {
   Header,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
+  Put,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { UserDto } from './user.dto';
 import { UserService } from './user.service';
@@ -18,7 +21,9 @@ import { UserUpdateDto } from './user-update.dto';
 import { UserUpdatePasswordDto } from './user-update-password.dto';
 import { TwoFactorGuard } from '../two-factor/two-factor.guard';
 import { Throttle } from '@nestjs/throttler';
+import { CookieInterceptor } from 'src/common/interceptors/cookie.interceptor';
 
+@UseInterceptors(CookieInterceptor)
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -33,20 +38,22 @@ export class UserController {
 
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   @HttpCode(HttpStatus.OK)
-  @Post('/update')
-  @UseGuards(JwtAuthGuard)
+  @Put('/update')
+  @UseGuards(JwtAuthGuard, TwoFactorGuard)
   @Header('Content-Type', 'application/json')
   async update(
     @Body() user: UserUpdateDto,
     @Req() req: Request,
-  ): Promise<User> {
+  ): Promise<{ user: User; accessToken: string }> {
     const { sub: userId } = req.user as IPayload;
-    return this.userService.updateUser(userId, user);
+    const { user: updatedUser, accessToken } =
+      await this.userService.updateUser(userId, user);
+    return { user: updatedUser, accessToken };
   }
 
   @Throttle({ default: { ttl: 300000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
-  @Post('/change-password')
+  @Patch('/change-password')
   @UseGuards(JwtAuthGuard, TwoFactorGuard)
   @Header('Content-Type', 'application/json')
   async changePassword(

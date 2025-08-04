@@ -1,10 +1,11 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { User, type IProvider } from './user.entity';
+import { IProvider, User } from './user.entity';
 import { Repository } from 'typeorm';
 import { CryptoHelper } from 'src/common/helpers/crypto.helper';
 import { EmailService } from '../email/email.service';
-
+import { AuthService } from '../auth/auth.service';
+import type IPayload from 'src/common/interfaces/IPayload';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -13,6 +14,7 @@ export class UserService {
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     private readonly cryptoHelper: CryptoHelper,
     private readonly emailService: EmailService,
+    private readonly authService: AuthService,
   ) {}
 
   public create = async (user: Partial<User>): Promise<User> => {
@@ -34,13 +36,33 @@ export class UserService {
   public updateUser = async (
     id: string,
     updateUserDto: Partial<User>,
-  ): Promise<User> => {
+  ): Promise<{ user: User; accessToken: string }> => {
     const user = await this.userRepository.findOne({ where: { id } });
+
+    const cleanDto = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      Object.entries(updateUserDto).filter(([_, v]) => v !== undefined),
+    ) as Partial<User>;
+
+    if (Object.keys(cleanDto).length === 0)
+      throw new HttpException(
+        'No valid fields to update',
+        HttpStatus.BAD_REQUEST,
+      );
 
     if (!user) {
       this.logger.error(`User with id ${id} not found`);
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
+
+    const emailChanged =
+      cleanDto.email && this.getEmailHashed(cleanDto.email) !== user.emailHash;
+    const otherChanged = Object.entries(cleanDto).some(
+      ([k, v]) => k !== 'email' && v !== user[k],
+    );
+
+    if (!emailChanged && !otherChanged)
+      throw new HttpException('No changes detected', HttpStatus.BAD_REQUEST);
 
     if (updateUserDto.email && updateUserDto.email !== user.email) {
       const { iv, encryptedText } = this.cryptoHelper.encrypt(
@@ -51,6 +73,9 @@ export class UserService {
       user.iv = iv;
       user.email = encryptedText;
       user.emailHash = hashedEmail;
+      user.twoFactorEnabled = false;
+      user.twoFactorSecret = null;
+      user.isVerified = false;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -60,7 +85,17 @@ export class UserService {
     const updatedUser = await this.userRepository.save(user);
     this.logger.log(`User with id ${id} updated`);
 
-    return updatedUser;
+    const payload: Partial<IPayload> = {
+      sub: updateUserDto.id,
+      email: updateUserDto.email,
+      username: updateUserDto.username,
+      twoFactorEnabled: updateUserDto.twoFactorEnabled,
+      twoFactorValidated: false,
+    };
+
+    const accessToken = this.authService.createAccessToken(payload);
+
+    return { user: updatedUser, accessToken };
   };
 
   public changePassword = async (
@@ -98,7 +133,7 @@ export class UserService {
   };
 
   public verifyUser = async (email: string): Promise<void> => {
-    const user = await this.findByEmail(email);
+    const user = await this.getUserByProviderAndEmail(IProvider.DEFAULT, email);
 
     if (!user) {
       this.logger.error(`User with email ${email} not found`);
@@ -138,7 +173,7 @@ export class UserService {
     email: string,
     password: string,
   ): Promise<void> => {
-    const user = await this.findByEmail(email);
+    const user = await this.getUserByProviderAndEmail(IProvider.DEFAULT, email);
 
     if (!user) {
       this.logger.error(`User with email ${email} not found`);
@@ -160,4 +195,9 @@ export class UserService {
 
   private getEmailHashed = (email: string): string =>
     this.cryptoHelper.hash(email);
+
+  public emailExistsOnDatabase = async (email: string): Promise<boolean> => {
+    const emailHash = this.getEmailHashed(email);
+    return this.userRepository.exists({ where: { emailHash } });
+  };
 }

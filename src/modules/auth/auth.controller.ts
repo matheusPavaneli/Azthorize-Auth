@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Patch,
   Post,
   Query,
   Req,
@@ -62,7 +63,7 @@ export class AuthController {
   }
 
   @Throttle({ default: { ttl: 300000, limit: 10 } })
-  @Post('refresh-access-token')
+  @Patch('refresh-access-token')
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
@@ -107,7 +108,7 @@ export class AuthController {
   }
 
   @Throttle({ default: { ttl: 300000, limit: 3 } })
-  @Post('reset-password')
+  @Patch('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(
     @Query('token') token: string,

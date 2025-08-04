@@ -5,7 +5,8 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
-  Post,
+  Patch,
+  Put,
   Req,
   UseGuards,
   UseInterceptors,
@@ -17,6 +18,7 @@ import { TwoFactorService } from './two-factor.service';
 import TwoFactorDto from './two-factor.dto';
 import { CookieInterceptor } from 'src/common/interceptors/cookie.interceptor';
 import { Throttle } from '@nestjs/throttler';
+import { TwoFactorGuard } from './two-factor.guard';
 
 @UseInterceptors(CookieInterceptor)
 @Controller('2fa')
@@ -25,7 +27,7 @@ export class TwoFactorController {
 
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  @Get('generate')
+  @Patch('generate')
   async generate(
     @Req() req: Request,
   ): Promise<{ qrCode: string; message: string }> {
@@ -41,25 +43,28 @@ export class TwoFactorController {
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  @Post('activate')
+  @Put('activate')
   async enable(
     @Req() req: Request,
     @Body() { token }: TwoFactorDto,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; accessToken: string }> {
     const { sub: userId } = req.user as IPayload;
-    await this.twoFactorService.activateTwoFactor(userId, token);
-    return { message: '2FA enabled' };
+    const accessToken = await this.twoFactorService.activateTwoFactor(
+      userId,
+      token,
+    );
+    return { message: '2FA enabled', accessToken };
   }
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
-  @Post('verify')
+  @Patch('verify')
   @UseGuards(JwtAuthGuard)
   async verify(
     @Req() req: Request,
     @Body() { token }: TwoFactorDto,
   ): Promise<{ accessToken: string; message: string }> {
-    const { sub: userId, email, twoFactorValidated } = req.user as IPayload;
+    const { sub: userId, twoFactorValidated } = req.user as IPayload;
 
     if (twoFactorValidated) {
       throw new HttpException(
@@ -68,17 +73,13 @@ export class TwoFactorController {
       );
     }
 
-    const accessToken = await this.twoFactorService.verifyToken(
-      userId,
-      email,
-      token,
-    );
+    const accessToken = await this.twoFactorService.verifyToken(userId, token);
     return { accessToken, message: '2FA verified' };
   }
 
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @Get('disable')
+  @UseGuards(JwtAuthGuard, TwoFactorGuard)
+  @Put('disable')
   async disable(@Req() req: Request): Promise<{ message: string }> {
     const { sub: userId } = req.user as IPayload;
     await this.twoFactorService.deactivateTwoFactor(userId);
@@ -102,7 +103,7 @@ export class TwoFactorController {
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  @Post('verify-email-token')
+  @Patch('verify-email-token')
   async verifyTokenByEmail(
     @Body() { token }: TwoFactorDto,
     @Req() req: Request,

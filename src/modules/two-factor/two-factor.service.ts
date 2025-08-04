@@ -28,8 +28,14 @@ export class TwoFactorService {
 
   generateSecret = async (
     email: string,
-    sub: string,
+    userId: string,
   ): Promise<{ otpauth_url: string }> => {
+    const user = await this.userService.findyById(userId);
+
+    if (!user?.isVerified) {
+      throw new HttpException('User must be verified', HttpStatus.FORBIDDEN);
+    }
+
     const secret = speakeasy.generateSecret({
       name: `Authenticator ${email}`,
     });
@@ -42,7 +48,9 @@ export class TwoFactorService {
     }
 
     this.logger.log('Secret generated');
-    await this.userService.updateUser(sub, { twoFactorSecret: secret.base32 });
+    await this.userService.updateUser(userId, {
+      twoFactorSecret: secret.base32,
+    });
 
     return {
       otpauth_url: secret.otpauth_url!,
@@ -62,13 +70,8 @@ export class TwoFactorService {
     return qrCode;
   };
 
-  verifyToken = async (
-    userId: string,
-    email: string,
-    token: string,
-  ): Promise<string> => {
+  verifyToken = async (userId: string, token: string): Promise<string> => {
     const user = await this.verify2FAUser(userId);
-
     const verified = speakeasy.totp.verify({
       secret: user.twoFactorSecret!,
       encoding: 'base32',
@@ -87,7 +90,7 @@ export class TwoFactorService {
   public activateTwoFactor = async (
     userId: string,
     token: string,
-  ): Promise<boolean> => {
+  ): Promise<string> => {
     const user = await this.verify2FAUser(userId);
 
     const isValid = speakeasy.totp.verify({
@@ -102,9 +105,14 @@ export class TwoFactorService {
       throw new HttpException('Invalid token', HttpStatus.UNAUTHORIZED);
     }
 
+    if (user.twoFactorEnabled) {
+      throw new HttpException('2FA already enabled', HttpStatus.CONFLICT);
+    }
+
     this.logger.log('Two-factor authentication enabled');
     await this.userService.updateUser(userId, { twoFactorEnabled: true });
-    return true;
+    const accessToken = this.generateEnabledTwoFactorAccessToken(user);
+    return accessToken;
   };
 
   public deactivateTwoFactor = async (userId: string): Promise<boolean> => {
@@ -165,7 +173,7 @@ export class TwoFactorService {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
 
-    if (!user.twoFactorEnabled) {
+    if (!user.twoFactorSecret) {
       throw new HttpException(
         'Two-factor authentication is not enabled for this user',
         HttpStatus.CONFLICT,
@@ -182,6 +190,19 @@ export class TwoFactorService {
       username: user.username,
       twoFactorValidated: true,
       twoFactorEnabled: user.twoFactorEnabled,
+    };
+
+    const accessToken = this.authService.createAccessToken(payload);
+    return accessToken;
+  };
+
+  public generateEnabledTwoFactorAccessToken = (user: User): string => {
+    const payload: Partial<IPayload> = {
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+      twoFactorValidated: false,
+      twoFactorEnabled: true,
     };
 
     const accessToken = this.authService.createAccessToken(payload);

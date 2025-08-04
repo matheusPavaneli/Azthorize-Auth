@@ -13,7 +13,6 @@ import * as bcrypt from 'bcrypt';
 export enum IProvider {
   GOOGLE = 'google',
   DEFAULT = 'default',
-  AZURE = 'azure',
 }
 
 @Entity('users')

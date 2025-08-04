@@ -15,6 +15,7 @@ import * as redisStore from 'cache-manager-redis-store';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { APP_GUARD } from '@nestjs/core';
+import * as path from 'path';
 import GoogleStrategyConfig from './config/google.strategy.config';
 @Module({
   providers: [
@@ -26,6 +27,10 @@ import GoogleStrategyConfig from './config/google.strategy.config';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: path.resolve(
+        process.cwd(),
+        `.env.${process.env.NODE_ENV || 'development'}`,
+      ),
       load: [
         DatabaseConfig,
         BullmqConfig,

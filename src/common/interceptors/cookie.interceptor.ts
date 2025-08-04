@@ -23,6 +23,16 @@ export class CookieInterceptor implements NestInterceptor {
         }) => {
           const path = req.path;
 
+          if (path === '/user/update' && data?.accessToken) {
+            res.cookie('access_token', data.accessToken, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'strict',
+              maxAge: 15 * 60 * 1000,
+            });
+            delete data.accessToken;
+          }
+
           if (
             path === '/auth/login' &&
             data?.refreshToken &&
@@ -65,6 +75,16 @@ export class CookieInterceptor implements NestInterceptor {
           }
 
           if (path === '/auth/refresh-access-token' && data?.accessToken) {
+            res.cookie('access_token', data.accessToken, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'strict',
+              maxAge: 15 * 60 * 1000,
+            });
+            delete data.accessToken;
+          }
+
+          if (path === '/2fa/activate' && data?.accessToken) {
             res.cookie('access_token', data.accessToken, {
               httpOnly: true,
               secure: process.env.NODE_ENV === 'production',

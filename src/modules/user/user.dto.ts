@@ -2,6 +2,7 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -24,4 +25,16 @@ export class UserDto {
   @MinLength(3, { message: 'email must be at least 3 characters long' })
   @MaxLength(256, { message: 'email must be at most 256 characters long' })
   email: string;
+
+  @IsString({ message: 'password must be a string' })
+  @MinLength(3, { message: 'password must be at least 3 characters long' })
+  @MaxLength(256, { message: 'password must be at most 256 characters long' })
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{3,256}$/,
+    {
+      message:
+        'password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+    },
+  )
+  password: string;
 }

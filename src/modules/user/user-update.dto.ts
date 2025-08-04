@@ -20,12 +20,14 @@ export class UserUpdateDto {
   @MaxLength(32, { message: 'username must be at most 32 characters long' })
   username?: string;
 
+  @IsOptional()
   @IsString({ message: 'email must be a string' })
   @IsEmail({}, { message: 'email must be a valid email address' })
   @MinLength(3, { message: 'email must be at least 3 characters long' })
   @MaxLength(256, { message: 'email must be at most 256 characters long' })
   email: string;
 
+  @IsOptional()
   @IsString({ message: 'password must be a string' })
   @MinLength(3, { message: 'password must be at least 3 characters long' })
   @MaxLength(256, { message: 'password must be at most 256 characters long' })
